@@ -1,36 +1,36 @@
 # slack-bot-mcp
 
-An MCP server that gives an AI agent a Slack bot's full Web API surface — **298 catalogued methods**, including the ones most Slack integrations never reach: AI message streaming, canvases, lists, and the assistant thread APIs.
+Slack 봇의 Web API 전체를 AI 에이전트가 쓸 수 있게 열어 주는 MCP 서버입니다. 카탈로그에 등록된 메서드는 **298개**이고, 보통의 Slack 연동이 다루지 않는 AI 메시지 스트리밍, 캔버스, 리스트, 어시스턴트 스레드 API까지 포함합니다.
 
-Requires Node.js 20+ and a Slack app with a bot token.
+Node.js 20 이상과 봇 토큰이 발급된 Slack 앱이 필요합니다.
 
-It works in two layers:
+구조는 두 층입니다.
 
-- **64 dedicated tools** for the surface a bot actually uses day to day. Typed arguments, `#channel`/`@user`/email resolution, compact responses, and error messages that say what to do next.
-- **A discovery trio** — `slack_list_api_methods`, `slack_describe_api_method`, `slack_call_api` — that reaches every remaining method, plus anything Slack ships tomorrow.
+- **전용 툴 64개**: 봇이 자주 쓰는 기능을 담당합니다. 인자에 타입이 있고, `#channel`·`@user`·이메일을 알아서 ID로 바꿔 주고, 응답을 필요한 만큼만 줄여서 돌려줍니다. 에러 메시지에는 다음에 뭘 해야 하는지 적혀 있습니다.
+- **디스커버리 툴 3개**: `slack_list_api_methods`, `slack_describe_api_method`, `slack_call_api`로 나머지 메서드에 전부 접근합니다. Slack에 새 메서드가 생겨도 그대로 쓸 수 있습니다.
 
-## Why not the official Slack MCP server?
+## 공식 Slack MCP 서버와 뭐가 다른가요
 
-Slack hosts one at `mcp.slack.com` (GA February 2026), and it is the right choice for letting a person's AI client search and read their workspace. It authenticates as a **user** over OAuth and exposes a focused read/search toolset.
+Slack도 `mcp.slack.com`에 공식 서버를 운영합니다(2026년 2월 GA). 개인이 자기 AI 클라이언트로 워크스페이스를 검색하고 읽는 용도라면 그쪽이 맞습니다. OAuth로 **사용자** 자격을 받고, 읽기와 검색 위주의 툴만 제공합니다.
 
-This server is the other case: acting **as a bot**, with a bot token, across the whole API — posting, editing, uploading, streaming, managing channels, driving canvases and lists.
+이 서버는 반대 경우를 위한 것입니다. 봇 토큰으로 **봇 자격으로** 동작하고, API 전 범위를 다룹니다. 메시지 작성과 수정, 파일 업로드, 스트리밍, 채널 관리, 캔버스와 리스트 조작까지 가능합니다.
 
-## How it stays current
+## 카탈로그를 최신으로 유지하는 방법
 
-Slack's published OpenAPI spec is stale — it lists 174 methods and is missing `chat.startStream`, every `canvases.*` and `slackLists.*` method, `assistant.*`, and the current file upload flow. So the method catalog is **generated from the `@slack/web-api` TypeScript declarations**, which do track the platform:
+Slack이 공개한 OpenAPI 스펙은 오래됐습니다. 메서드가 174개뿐이고 `chat.startStream`, `canvases.*`, `slackLists.*`, `assistant.*`, 최신 파일 업로드 플로우가 전부 빠져 있습니다. 그래서 메서드 카탈로그는 실제로 최신 상태를 따라가는 **`@slack/web-api`의 TypeScript 선언 파일에서 생성**합니다.
 
 ```bash
-npm i @slack/web-api@latest   # SDK bump
-npm run gen:catalog           # regenerates src/generated/catalog.json
+npm i @slack/web-api@latest   # SDK 업데이트
+npm run gen:catalog           # src/generated/catalog.json 재생성
 ```
 
-That one step teaches the server every new method, its arguments, and its docs link. A short hand-maintained list (`src/slack/extra-methods.ts`) covers the handful Slack documents before the SDK types them, such as `assistant.search.context`. And `slack_call_api` will attempt a method it has never heard of rather than refuse it, so a brand-new endpoint works before either list catches up.
+이것만 돌리면 새로 추가된 메서드와 인자, 문서 링크까지 서버가 전부 인식합니다. SDK 타입보다 Slack 문서가 먼저 나온 소수의 메서드(`assistant.search.context` 등)는 직접 관리하는 목록(`src/slack/extra-methods.ts`)으로 채웁니다. `slack_call_api`는 카탈로그에 없는 메서드도 일단 호출해 보기 때문에, 두 목록이 갱신되기 전에도 새 엔드포인트를 쓸 수 있습니다.
 
-## Setup
+## 시작하기
 
-### 1. Create the Slack app
+### 1. Slack 앱 만들기
 
-Create an app at [api.slack.com/apps](https://api.slack.com/apps) → **From an app manifest**, and paste this. Trim the scopes you do not need — every scope is a permission someone has to justify.
+[api.slack.com/apps](https://api.slack.com/apps)에서 **From an app manifest**를 고르고 아래 매니페스트를 붙여 넣으세요. 필요 없는 스코프는 지우는 게 좋습니다. 스코프 하나가 곧 권한 하나고, 나중에 전부 설명해야 합니다.
 
 ```yaml
 display_information:
@@ -41,11 +41,11 @@ features:
 oauth_config:
   scopes:
     bot:
-      # messaging
+      # 메시징
       - chat:write
-      - chat:write.public      # post to public channels without joining
-      - chat:write.customize   # icon_emoji / username overrides
-      # channels
+      - chat:write.public      # 채널에 참여하지 않고 공개 채널에 게시
+      - chat:write.customize   # icon_emoji / username 덮어쓰기
+      # 채널
       - channels:read
       - groups:read
       - im:read
@@ -58,24 +58,24 @@ oauth_config:
       - channels:manage
       - groups:write
       - im:write
-      # people
+      # 사용자
       - users:read
       - users:read.email
-      # reactions, pins, bookmarks
+      # 리액션, 핀, 북마크
       - reactions:read
       - reactions:write
       - pins:read
       - pins:write
       - bookmarks:read
       - bookmarks:write
-      # files
+      # 파일
       - files:read
       - files:write
-      # workspace
+      # 워크스페이스
       - emoji:read
       - team:read
       - usergroups:read
-      # optional toolsets
+      # 선택 툴셋
       - canvases:read
       - canvases:write
       - lists:read
@@ -86,14 +86,13 @@ settings:
   socket_mode_enabled: false
 ```
 
-Install it, then copy the **Bot User OAuth Token** (`xoxb-…`).
+앱을 설치한 뒤 **Bot User OAuth Token**(`xoxb-`로 시작)을 복사합니다.
 
-`slack_search_messages` and `slack_search_files` additionally need a **user** token (`xoxp-…`) with `search:read` — Slack does not accept bot tokens for search at all.
+`slack_search_messages`와 `slack_search_files`는 `search:read` 권한이 붙은 **사용자 토큰**(`xoxp-`)이 따로 필요합니다. Slack 검색 API는 봇 토큰을 아예 받지 않습니다.
 
-### 2. Register with your MCP client
+### 2. MCP 클라이언트에 등록하기
 
-Nothing to install. The client runs it straight from this repository, and npm
-builds it on first use.
+따로 설치할 건 없습니다. 클라이언트가 저장소에서 바로 실행하고, 처음 실행할 때 npm이 빌드합니다.
 
 **Claude Code**
 
@@ -103,7 +102,7 @@ claude mcp add slack \
   -- npx -y github:2duckchun/slack-mcp
 ```
 
-**Claude Desktop** (`claude_desktop_config.json`) **or any `mcp.json`**
+**Claude Desktop**(`claude_desktop_config.json`) **또는 다른 `mcp.json`**
 
 ```json
 {
@@ -120,44 +119,43 @@ claude mcp add slack \
 }
 ```
 
-Pin a tag or branch with `#`:
+태그나 브랜치는 `#`으로 고정합니다.
 
 ```bash
 npx -y github:2duckchun/slack-mcp#v0.1.0 --help
 ```
 
-> To point at a local clone instead, use `"command": "node"` and
-> `"args": ["/absolute/path/to/slack-mcp/dist/index.js"]` after `npm install && npm run build`.
+> 로컬 클론을 쓰려면 `npm install && npm run build`를 먼저 하고, `"command"`를 `"node"`로, `"args"`를 `["/절대경로/slack-mcp/dist/index.js"]`로 바꾸면 됩니다.
 
-Check it works before wiring anything up:
+등록하기 전에 실행이 되는지 먼저 확인해 보세요.
 
 ```bash
 npx -y github:2duckchun/slack-mcp --help
 ```
 
-## Configuration
+## 설정
 
-| Variable | Default | What it does |
+| 변수 | 기본값 | 설명 |
 | --- | --- | --- |
-| `SLACK_BOT_TOKEN` | — | Bot token (`xoxb-…`). Required unless a user token is set. |
-| `SLACK_USER_TOKEN` | — | User token (`xoxp-…`). Needed for `search.*`, `reminders.*`, `admin.*`, and other user-token-only methods. |
-| `SLACK_MCP_TOOLSETS` | `core,messaging,conversations,users,reactions,files,workspace` | Comma-separated toolsets, or `all`. `core` is always included. |
-| `SLACK_MCP_READ_ONLY` | `false` | Withholds every write tool and refuses write methods through `slack_call_api`. |
-| `SLACK_MCP_ALLOWED_CHANNELS` | — | Confines writes to these channels (IDs or `#names`). |
-| `SLACK_MCP_ENABLE_ADMIN` | `false` | Allows `admin.*`. Off by default — these are org-wide operations. |
-| `SLACK_MCP_DENIED_METHODS` | `auth.revoke, apps.uninstall, tooling.tokens.rotate, oauth.*, openid.*, migration.exchange` | Method patterns to refuse. Setting this replaces the defaults. |
-| `SLACK_MCP_ALLOWED_METHODS` | — | If set, only matching methods may be called. |
-| `SLACK_MCP_MAX_RESPONSE_CHARS` | `40000` | Ceiling on the JSON rendered into a tool result. Overflow is cut with a visible notice. |
-| `SLACK_MCP_TEAM_ID` | — | Team ID for org-wide installs. |
-| `SLACK_API_URL` | Slack's | Override the API base URL (for testing). |
+| `SLACK_BOT_TOKEN` | — | 봇 토큰(`xoxb-`). 사용자 토큰이 없다면 필수입니다. |
+| `SLACK_USER_TOKEN` | — | 사용자 토큰(`xoxp-`). `search.*`, `reminders.*`, `admin.*`처럼 사용자 토큰만 받는 메서드에 필요합니다. |
+| `SLACK_MCP_TOOLSETS` | `core,messaging,conversations,users,reactions,files,workspace` | 쉼표로 구분한 툴셋 목록 또는 `all`. `core`는 항상 포함됩니다. |
+| `SLACK_MCP_READ_ONLY` | `false` | 쓰기 툴을 전부 감추고, `slack_call_api`로 들어오는 쓰기 메서드도 거부합니다. |
+| `SLACK_MCP_ALLOWED_CHANNELS` | — | 쓰기를 지정한 채널(ID 또는 `#이름`)로만 제한합니다. |
+| `SLACK_MCP_ENABLE_ADMIN` | `false` | `admin.*` 호출을 허용합니다. 조직 전체에 영향을 주는 작업이라 기본은 꺼져 있습니다. |
+| `SLACK_MCP_DENIED_METHODS` | `auth.revoke, apps.uninstall, tooling.tokens.rotate, oauth.*, openid.*, migration.exchange` | 거부할 메서드 패턴. 값을 지정하면 기본값을 대체합니다. |
+| `SLACK_MCP_ALLOWED_METHODS` | — | 값을 지정하면 여기에 걸리는 메서드만 호출할 수 있습니다. |
+| `SLACK_MCP_MAX_RESPONSE_CHARS` | `40000` | 툴 결과로 내보낼 JSON의 최대 길이. 넘으면 잘라 내고 안내 문구를 붙입니다. |
+| `SLACK_MCP_TEAM_ID` | — | 조직 단위(org-wide) 설치에서 쓰는 팀 ID. |
+| `SLACK_API_URL` | Slack 기본값 | API 주소를 바꿉니다(테스트용). |
 
-**A note on defaults.** Writes are enabled and unconfined out of the box, because a bot that cannot post is not a bot. If the agent driving this is experimental, start with `SLACK_MCP_ALLOWED_CHANNELS` pointed at a scratch channel, or `SLACK_MCP_READ_ONLY=true`.
+**기본값에 대해.** 기본 설정에서는 쓰기가 켜져 있고 채널 제한도 없습니다. 메시지를 못 보내는 봇은 쓸모가 없으니까요. 다만 아직 검증되지 않은 에이전트에 붙일 거라면 `SLACK_MCP_ALLOWED_CHANNELS`에 테스트 채널만 지정하거나 `SLACK_MCP_READ_ONLY=true`로 시작하는 쪽을 권합니다.
 
-## Toolsets
+## 툴셋
 
-Enabled by default:
+기본으로 켜지는 툴셋:
 
-| Toolset | Tools |
+| 툴셋 | 툴 |
 | --- | --- |
 | `core` | `slack_auth_test`, `slack_list_api_methods`, `slack_describe_api_method`, `slack_call_api` |
 | `messaging` | `slack_send_message`, `slack_update_message`, `slack_delete_message`, `slack_send_ephemeral`, `slack_schedule_message`, `slack_list_scheduled_messages`, `slack_delete_scheduled_message`, `slack_get_permalink`, `slack_start_stream`, `slack_append_stream`, `slack_stop_stream` |
@@ -167,76 +165,71 @@ Enabled by default:
 | `files` | `slack_upload_file`, `slack_get_file_info`, `slack_list_files`, `slack_delete_file` |
 | `workspace` | `slack_get_team_info`, `slack_list_emoji`, `slack_list_usergroups` |
 
-Opt-in — add to `SLACK_MCP_TOOLSETS`:
+선택 툴셋(`SLACK_MCP_TOOLSETS`에 추가해야 켜집니다):
 
-| Toolset | Tools | Notes |
+| 툴셋 | 툴 | 비고 |
 | --- | --- | --- |
-| `search` | `slack_search_messages`, `slack_search_files` | Requires `SLACK_USER_TOKEN`. |
-| `canvas` | `slack_create_canvas`, `slack_edit_canvas`, `slack_lookup_canvas_sections`, `slack_set_canvas_access`, `slack_delete_canvas` | Paid Slack plan. |
-| `lists` | `slack_create_list`, `slack_list_list_items`, `slack_create_list_item`, `slack_update_list_item` | Paid Slack plan. |
-| `assistant` | `slack_set_assistant_status`, `slack_set_assistant_title`, `slack_set_suggested_prompts` | Apps with the assistant feature. |
-| `views` | `slack_validate_blocks`, `slack_publish_home_view`, `slack_open_modal`, `slack_push_modal`, `slack_update_modal` | Modals need a live `trigger_id`. |
+| `search` | `slack_search_messages`, `slack_search_files` | `SLACK_USER_TOKEN` 필요 |
+| `canvas` | `slack_create_canvas`, `slack_edit_canvas`, `slack_lookup_canvas_sections`, `slack_set_canvas_access`, `slack_delete_canvas` | Slack 유료 플랜 필요 |
+| `lists` | `slack_create_list`, `slack_list_list_items`, `slack_create_list_item`, `slack_update_list_item` | Slack 유료 플랜 필요 |
+| `assistant` | `slack_set_assistant_status`, `slack_set_assistant_title`, `slack_set_suggested_prompts` | 어시스턴트 기능을 켠 앱에서만 |
+| `views` | `slack_validate_blocks`, `slack_publish_home_view`, `slack_open_modal`, `slack_push_modal`, `slack_update_modal` | 모달은 유효한 `trigger_id`가 있어야 동작 |
 
-They are opt-in only to keep the tool list short: every registered tool costs context in the host, on every turn.
+기본으로 꺼 둔 이유는 툴 목록을 짧게 유지하기 위해서입니다. 등록된 툴은 개수만큼 매 턴 호스트의 컨텍스트를 차지합니다.
 
-## Reaching the rest of the API
+## 나머지 API 쓰기
 
-Around 65 methods have a dedicated tool. The rest are one call away:
+전용 툴이 있는 메서드는 65개 정도고, 나머지도 호출 한 번이면 닿습니다.
 
 ```
 slack_list_api_methods    { query: "reminder" }
   → reminders.add, reminders.complete, reminders.delete, reminders.info, reminders.list
 
 slack_describe_api_method { method: "reminders.add" }
-  → arguments, types, which are required, which token Slack wants, docs link
+  → 인자, 타입, 필수 여부, 필요한 토큰 종류, 문서 링크
 
 slack_call_api            { method: "reminders.add", params: { text: "ship it", time: "tomorrow at 9am" } }
 ```
 
-`slack_call_api` runs through the same gates as every other tool: read-only mode, the channel allowlist, the admin switch, and the deny list all still apply. It refuses a `token` in `params` — credentials come from the server's configuration, not from model output.
+`slack_call_api`도 다른 툴과 똑같은 제약을 받습니다. 읽기 전용 모드, 채널 허용 목록, 어드민 스위치, 거부 목록이 전부 그대로 적용됩니다. `params`에 `token`을 넣으면 거부합니다. 자격 증명은 모델이 만든 값이 아니라 서버 설정에서만 가져옵니다.
 
-## Design notes
+## 설계 메모
 
-**Responses are projected, not forwarded.** A raw `users.list` page carries eight icon URLs per member; `conversations.history` repeats every block of every message. Each tool returns the fields a caller reasons about, in `structuredContent` and as readable JSON. The untouched response is always available through `slack_call_api`.
+**응답은 그대로 넘기지 않고 추립니다.** `users.list` 한 페이지에는 멤버마다 아이콘 URL이 여덟 개씩 들어 있고, `conversations.history`는 메시지마다 블록 전체를 반복해서 내려 줍니다. 각 툴은 호출한 쪽이 실제로 판단에 쓰는 필드만 골라 `structuredContent`와 읽기 좋은 JSON으로 돌려줍니다. 가공 전 원본이 필요하면 `slack_call_api`로 받으면 됩니다.
 
-**Identifiers are resolved.** `#general`, `@sujin`, and `sujin@example.com` all work wherever an ID is accepted. Directory lookups are cached for ten minutes and only performed when a name that is not already known needs resolving.
+**식별자는 알아서 변환합니다.** ID가 들어갈 자리에 `#general`, `@sujin`, `sujin@example.com`을 그대로 넣어도 됩니다. 조회 결과는 10분간 캐시하고, 모르는 이름이 나올 때만 새로 조회합니다.
 
-**Errors say what to do.** `missing_scope` reports the needed and provided scopes and tells you to reinstall; `not_in_channel` points at `slack_join_channel`; `invalid_blocks` points at `slack_validate_blocks`; rate limits report their retry delay.
+**에러는 해결 방법까지 알려줍니다.** `missing_scope`면 필요한 스코프와 현재 스코프를 같이 보여주면서 재설치를 안내합니다. `not_in_channel`이면 `slack_join_channel`을, `invalid_blocks`면 `slack_validate_blocks`를 가리킵니다. 레이트 리밋에 걸리면 얼마나 기다려야 하는지 함께 표시합니다.
 
-**Read/write classification fails closed.** An unrecognised method counts as a write, so read-only mode never leaks a mutation through a method the classifier has not seen.
+**읽기/쓰기 판정은 보수적으로 합니다.** 분류에 없는 메서드는 쓰기로 간주합니다. 아직 등록되지 않은 메서드 때문에 읽기 전용 모드가 뚫리는 일은 없습니다.
 
-## Development
+## 개발
 
 ```bash
 npm install
-npm run gen:catalog   # regenerate the API catalog from @slack/web-api
-npm run check         # typecheck + 99 tests
-npm run dev           # run from source over stdio (reads .env if present)
+npm run gen:catalog   # @slack/web-api에서 API 카탈로그 재생성
+npm run check         # 타입 체크 + 테스트 99개
+npm run dev           # 소스를 stdio로 바로 실행 (.env가 있으면 읽음)
 npm run build         # tsup -> dist/index.js
-npm run smoke         # build first; drives dist/index.js over real stdio MCP
-npm run inspect       # build first; opens the MCP Inspector against it
+npm run smoke         # 빌드 후 실제 stdio MCP로 dist/index.js 구동
+npm run inspect       # 빌드 후 MCP Inspector 실행
 ```
 
-Tests mock Slack with `msw` and drive the server over MCP's in-memory transport, so the suite needs no token and touches no workspace. `npm run smoke` goes one level out — it spawns the built binary and speaks the protocol to it; give it a real `SLACK_BOT_TOKEN` and it will also list channels from your workspace.
+테스트는 `msw`로 Slack API를 모킹하고 MCP 인메모리 트랜스포트로 서버를 띄웁니다. 토큰 없이 돌아가고 실제 워크스페이스는 건드리지 않습니다. `npm run smoke`는 한 단계 더 나아가 빌드된 바이너리를 실제로 실행해서 프로토콜로 통신합니다. 여기에 진짜 `SLACK_BOT_TOKEN`을 넣으면 워크스페이스 채널 목록까지 가져옵니다.
 
-**How `npx -y github:…` works here.** `tsup` bundles everything into a single
-`dist/index.js` with a `#!/usr/bin/env node` banner, and `"prepare": "tsup"`
-makes npm run that build whenever the package is installed from a git source.
-The generated API catalog is a JSON import, so it is inlined into the bundle —
-the published artifact has no data file to find at runtime. `dist/` is
-therefore not committed; it is built on the consumer's machine.
+**`npx -y github:…`로 실행되는 원리.** `tsup`이 전체를 `dist/index.js` 하나로 번들하면서 `#!/usr/bin/env node` 배너를 붙입니다. `package.json`의 `"prepare": "tsup"` 덕분에 git 소스로 설치할 때 npm이 이 빌드를 자동으로 돌립니다. API 카탈로그는 JSON import라 번들 안에 그대로 들어가서, 실행 시점에 따로 찾아야 할 데이터 파일이 없습니다. 그래서 `dist/`는 커밋하지 않고 설치하는 쪽에서 빌드합니다.
 
-To verify that path end to end:
+이 과정을 직접 확인하려면:
 
 ```bash
-npm pack                                   # runs prepare, produces the tarball
+npm pack                                   # prepare가 실행되며 tarball 생성
 npm i -g ./slack-bot-mcp-0.1.0.tgz
 slack-bot-mcp --version
 ```
 
-## Known limits
+## 알려진 한계
 
-- **stdio only.** `createServer()` in `src/server.ts` is transport-independent; adding a Streamable HTTP entry point alongside `src/index.ts` is the natural next step.
-- **No event handling.** MCP is request/response; receiving Slack events needs Socket Mode in a separate process.
-- **Single workspace.** Tokens come from the environment. Multi-workspace OAuth would need a token store, for which `src/slack/client.ts` is the seam.
-- **Some methods need credentials this server does not hold** — app-level tokens (`apps.connections.open`), app configuration tokens (`apps.manifest.*`), client secrets (`oauth.*`). These are refused up front with an explanation rather than a confusing Slack error.
+- **stdio만 지원합니다.** `src/server.ts`의 `createServer()`는 트랜스포트와 분리돼 있어서, `src/index.ts` 옆에 Streamable HTTP 엔트리포인트를 추가하는 게 자연스러운 다음 단계입니다.
+- **이벤트는 처리하지 않습니다.** MCP는 요청/응답 방식이라, Slack 이벤트를 받으려면 별도 프로세스에서 Socket Mode를 돌려야 합니다.
+- **워크스페이스 하나만 지원합니다.** 토큰을 환경 변수에서 읽습니다. 여러 워크스페이스를 OAuth로 붙이려면 토큰 저장소가 필요하고, 손볼 지점은 `src/slack/client.ts`입니다.
+- **이 서버가 가질 수 없는 자격 증명을 요구하는 메서드가 있습니다.** 앱 레벨 토큰(`apps.connections.open`), 앱 설정 토큰(`apps.manifest.*`), 클라이언트 시크릿(`oauth.*`) 같은 것들입니다. 이런 메서드는 Slack의 알아보기 어려운 에러를 그대로 보여주는 대신, 호출 전에 이유를 붙여 거부합니다.
