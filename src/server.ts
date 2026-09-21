@@ -16,6 +16,7 @@ import { searchTools } from './tools/search.js';
 import { userTools } from './tools/users.js';
 import { viewTools } from './tools/views.js';
 import { workspaceTools } from './tools/workspace.js';
+import { SERVER_VERSION } from './version.js';
 
 export const ALL_TOOLS: ToolDefinition[] = [
     ...coreTools,
@@ -33,7 +34,6 @@ export const ALL_TOOLS: ToolDefinition[] = [
 ];
 
 export const SERVER_NAME = 'slack-bot-mcp';
-export const SERVER_VERSION = '0.1.0';
 
 export interface CreatedServer {
     server: McpServer;

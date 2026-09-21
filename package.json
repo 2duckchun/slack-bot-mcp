@@ -1,29 +1,31 @@
 {
   "name": "slack-bot-mcp",
   "version": "0.1.0",
-  "description": "MCP server exposing the full modern Slack Web API surface to a Slack bot token",
+  "description": "Slack \ubd07\uc758 Web API \uc804\uccb4\ub97c \uac10\uc2fc stdio MCP \uc11c\ubc84 (Slack bot Web API MCP server)",
   "type": "module",
   "license": "MIT",
   "engines": {
     "node": ">=20"
   },
   "bin": {
-    "slack-bot-mcp": "dist/index.js"
+    "slack-bot-mcp": "./dist/index.js"
   },
-  "main": "dist/server.js",
+  "main": "./dist/index.js",
   "files": [
-    "dist",
-    "README.md"
+    "dist"
   ],
   "scripts": {
+    "dev": "tsx --env-file-if-exists=.env src/index.ts",
+    "build": "tsup",
+    "start": "node dist/index.js",
     "gen:catalog": "tsx scripts/gen-catalog.ts",
-    "build": "tsc -p tsconfig.build.json && node scripts/copy-assets.mjs",
-    "dev": "tsx src/index.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "npm run build",
-    "smoke": "tsx scripts/smoke.ts"
+    "smoke": "tsx scripts/smoke.ts",
+    "check": "npm run typecheck && npm test",
+    "inspect": "npx -y @modelcontextprotocol/inspector node dist/index.js",
+    "prepare": "tsup"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.0.0",
@@ -35,8 +37,28 @@
     "@types/node": "^22.10.0",
     "msw": "^2.7.0",
     "ts-morph": "^24.0.0",
+    "tsup": "^8.5.1",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
-  }
+  },
+  "author": "2duckchun <kkts9308@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/2duckchun/slack-mcp.git"
+  },
+  "homepage": "https://github.com/2duckchun/slack-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/2duckchun/slack-mcp/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "slack",
+    "slack-bot",
+    "slack-api",
+    "chatops",
+    "claude"
+  ]
 }

@@ -2,6 +2,8 @@
 
 An MCP server that gives an AI agent a Slack bot's full Web API surface — **298 catalogued methods**, including the ones most Slack integrations never reach: AI message streaming, canvases, lists, and the assistant thread APIs.
 
+Requires Node.js 20+ and a Slack app with a bot token.
+
 It works in two layers:
 
 - **64 dedicated tools** for the surface a bot actually uses day to day. Typed arguments, `#channel`/`@user`/email resolution, compact responses, and error messages that say what to do next.
@@ -88,31 +90,27 @@ Install it, then copy the **Bot User OAuth Token** (`xoxb-…`).
 
 `slack_search_messages` and `slack_search_files` additionally need a **user** token (`xoxp-…`) with `search:read` — Slack does not accept bot tokens for search at all.
 
-### 2. Build
+### 2. Register with your MCP client
 
-```bash
-npm install
-npm run build
-```
+Nothing to install. The client runs it straight from this repository, and npm
+builds it on first use.
 
-### 3. Register with your MCP client
-
-Claude Code:
+**Claude Code**
 
 ```bash
 claude mcp add slack \
   --env SLACK_BOT_TOKEN=xoxb-your-token \
-  -- node /absolute/path/to/slack-bot-mcp/dist/index.js
+  -- npx -y github:2duckchun/slack-mcp
 ```
 
-Claude Desktop / any `mcp.json`:
+**Claude Desktop** (`claude_desktop_config.json`) **or any `mcp.json`**
 
 ```json
 {
   "mcpServers": {
     "slack": {
-      "command": "node",
-      "args": ["/absolute/path/to/slack-bot-mcp/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "github:2duckchun/slack-mcp"],
       "env": {
         "SLACK_BOT_TOKEN": "xoxb-your-token",
         "SLACK_MCP_ALLOWED_CHANNELS": "#bot-playground"
@@ -122,10 +120,19 @@ Claude Desktop / any `mcp.json`:
 }
 ```
 
-Inspect it directly while developing:
+Pin a tag or branch with `#`:
 
 ```bash
-SLACK_BOT_TOKEN=xoxb-... npx @modelcontextprotocol/inspector node dist/index.js
+npx -y github:2duckchun/slack-mcp#v0.1.0 --help
+```
+
+> To point at a local clone instead, use `"command": "node"` and
+> `"args": ["/absolute/path/to/slack-mcp/dist/index.js"]` after `npm install && npm run build`.
+
+Check it works before wiring anything up:
+
+```bash
+npx -y github:2duckchun/slack-mcp --help
 ```
 
 ## Configuration
@@ -201,14 +208,31 @@ slack_call_api            { method: "reminders.add", params: { text: "ship it", 
 ## Development
 
 ```bash
+npm install
 npm run gen:catalog   # regenerate the API catalog from @slack/web-api
-npm run typecheck
-npm test              # 99 tests: catalog, policy, mocked Slack, MCP protocol
-npm run dev           # run from source over stdio
+npm run check         # typecheck + 99 tests
+npm run dev           # run from source over stdio (reads .env if present)
+npm run build         # tsup -> dist/index.js
 npm run smoke         # build first; drives dist/index.js over real stdio MCP
+npm run inspect       # build first; opens the MCP Inspector against it
 ```
 
 Tests mock Slack with `msw` and drive the server over MCP's in-memory transport, so the suite needs no token and touches no workspace. `npm run smoke` goes one level out — it spawns the built binary and speaks the protocol to it; give it a real `SLACK_BOT_TOKEN` and it will also list channels from your workspace.
+
+**How `npx -y github:…` works here.** `tsup` bundles everything into a single
+`dist/index.js` with a `#!/usr/bin/env node` banner, and `"prepare": "tsup"`
+makes npm run that build whenever the package is installed from a git source.
+The generated API catalog is a JSON import, so it is inlined into the bundle —
+the published artifact has no data file to find at runtime. `dist/` is
+therefore not committed; it is built on the consumer's machine.
+
+To verify that path end to end:
+
+```bash
+npm pack                                   # runs prepare, produces the tarball
+npm i -g ./slack-bot-mcp-0.1.0.tgz
+slack-bot-mcp --version
+```
 
 ## Known limits
 

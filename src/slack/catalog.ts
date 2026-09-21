@@ -1,7 +1,4 @@
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
+import generatedCatalog from '../generated/catalog.json' with { type: 'json' };
 import { EXTRA_METHODS } from './extra-methods.js';
 
 /**
@@ -9,8 +6,8 @@ import { EXTRA_METHODS } from './extra-methods.js';
  * from the `@slack/web-api` type declarations — see that file for why the
  * published OpenAPI spec is not used.
  *
- * Read from disk rather than `import ... with { type: 'json' }` so `tsc` does
- * not have to infer a type for a 300 KB literal on every typecheck.
+ * Imported rather than read from disk so the build can inline it: the published
+ * artifact is a single bundled file, with no data file to locate at runtime.
  */
 export interface CatalogArg {
     name: string;
@@ -48,8 +45,10 @@ let byName: Map<string, CatalogMethod> | undefined;
 export function loadCatalog(): Catalog {
     if (cached) return cached;
 
-    const path = join(dirname(fileURLToPath(import.meta.url)), '..', 'generated', 'catalog.json');
-    const generated = JSON.parse(readFileSync(path, 'utf8')) as Catalog;
+    // The JSON literal's inferred type is structurally narrower than `Catalog`
+    // (optional fields appear on only some entries), so it is asserted rather
+    // than checked. `scripts/gen-catalog.ts` owns the shape; `test/catalog.test.ts` guards it.
+    const generated = generatedCatalog as unknown as Catalog;
 
     // Hand-listed methods fill the gap where the SDK has no typings yet; a
     // generated entry of the same name always wins.
