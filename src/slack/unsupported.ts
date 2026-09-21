@@ -1,13 +1,13 @@
-export type TokenKind = 'bot' | 'user';
+import { patternToRegExp } from '../config.js';
 
 /**
- * Methods Slack will not accept a bot token for. Bot tokens are the default
- * everywhere else; routing these to the user token (when one is configured)
- * turns an opaque `not_allowed_token_type` into a working call.
+ * This server holds exactly one credential: a bot token. Everything Slack will
+ * not accept one for is listed here and refused before the call, so the caller
+ * gets a reason it can act on instead of an opaque `not_allowed_token_type`.
  *
  * Patterns ending in `.*` match a whole family.
  */
-const USER_TOKEN_PATTERNS: string[] = [
+const USER_TOKEN_ONLY: string[] = [
     'search.*',
     'stars.*',
     'reminders.*',
@@ -32,11 +32,10 @@ const USER_TOKEN_PATTERNS: string[] = [
 ];
 
 /**
- * Methods that need a token this server does not manage at all — an app-level
- * (`xapp-`) token, a configuration token, or a client secret. Reported as an
- * up-front error instead of a confusing Slack rejection.
+ * Methods needing a credential no workspace token can stand in for — an
+ * app-level (`xapp-`) token, a configuration token, or a client secret.
  */
-const UNSUPPORTED_TOKEN_METHODS: Record<string, string> = {
+const OTHER_CREDENTIALS: Record<string, string> = {
     'apps.connections.open': 'requires an app-level token (xapp-...), which this server does not manage',
     'apps.manifest.create': 'requires an app configuration token',
     'apps.manifest.delete': 'requires an app configuration token',
@@ -50,17 +49,13 @@ const UNSUPPORTED_TOKEN_METHODS: Record<string, string> = {
     'openid.connect.token': 'requires client credentials, not a workspace token'
 };
 
-const compiled = USER_TOKEN_PATTERNS.map((pattern) => {
-    const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
-    return new RegExp(`^${escaped}$`, 'i');
-});
+const USER_TOKEN_MESSAGE = 'is a user-token (xoxp-...) method; this server authenticates as a bot and cannot call it';
 
-/** The token kind Slack expects for this method. */
-export function preferredToken(method: string): TokenKind {
-    return compiled.some((re) => re.test(method)) ? 'user' : 'bot';
-}
+const userTokenOnly = USER_TOKEN_ONLY.map(patternToRegExp);
 
 /** Non-undefined when the method needs a credential this server cannot supply. */
-export function unsupportedTokenReason(method: string): string | undefined {
-    return UNSUPPORTED_TOKEN_METHODS[method];
+export function unsupportedReason(method: string): string | undefined {
+    const other = OTHER_CREDENTIALS[method];
+    if (other) return other;
+    return userTokenOnly.some((pattern) => pattern.test(method)) ? USER_TOKEN_MESSAGE : undefined;
 }

@@ -5,7 +5,7 @@ import * as z from 'zod';
  * install does not spend thousands of context tokens on tools the host will
  * never call.
  */
-export const TOOLSETS = ['core', 'messaging', 'conversations', 'users', 'reactions', 'files', 'workspace', 'search', 'canvas', 'lists', 'assistant', 'views'] as const;
+export const TOOLSETS = ['core', 'messaging', 'conversations', 'users', 'reactions', 'files', 'workspace', 'canvas', 'lists', 'assistant', 'views'] as const;
 
 export type Toolset = (typeof TOOLSETS)[number];
 
@@ -30,10 +30,8 @@ const boolish = z
 
 const EnvSchema = z.object({
     SLACK_BOT_TOKEN: z.string().min(1).optional(),
-    SLACK_USER_TOKEN: z.string().min(1).optional(),
     SLACK_MCP_TOOLSETS: z.string().optional(),
     SLACK_MCP_READ_ONLY: boolish,
-    SLACK_MCP_ENABLE_ADMIN: boolish,
     SLACK_MCP_ALLOWED_CHANNELS: z.string().optional(),
     SLACK_MCP_ALLOWED_METHODS: z.string().optional(),
     SLACK_MCP_DENIED_METHODS: z.string().optional(),
@@ -43,13 +41,10 @@ const EnvSchema = z.object({
 });
 
 export interface Config {
-    botToken?: string;
-    userToken?: string;
+    botToken: string;
     /** Only tools annotated `readOnlyHint` are registered, and writes are refused. */
     readOnly: boolean;
     toolsets: Set<Toolset>;
-    /** `admin.*` is refused unless explicitly enabled. */
-    enableAdmin: boolean;
     /** Channel IDs or `#names` that writes are confined to. Empty means no restriction. */
     allowedChannels: Set<string>;
     /** When non-empty, only matching methods may be called. */
@@ -88,13 +83,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     }
     const e = parsed.data;
 
-    if (!e.SLACK_BOT_TOKEN && !e.SLACK_USER_TOKEN) {
-        throw new Error('Set SLACK_BOT_TOKEN (xoxb-...) — or SLACK_USER_TOKEN (xoxp-...) if you only need user-token methods.');
+    if (!e.SLACK_BOT_TOKEN) {
+        throw new Error('Set SLACK_BOT_TOKEN (xoxb-...). This server authenticates as a bot and accepts no other credential.');
     }
 
     const config: Config = {
+        botToken: e.SLACK_BOT_TOKEN,
         readOnly: e.SLACK_MCP_READ_ONLY,
-        enableAdmin: e.SLACK_MCP_ENABLE_ADMIN,
         toolsets: parseToolsets(e.SLACK_MCP_TOOLSETS),
         allowedChannels: new Set(csv(e.SLACK_MCP_ALLOWED_CHANNELS ?? '')),
         allowedMethods: csv(e.SLACK_MCP_ALLOWED_METHODS ?? '').map(patternToRegExp),
@@ -102,8 +97,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
         maxResponseChars: e.SLACK_MCP_MAX_RESPONSE_CHARS
     };
 
-    if (e.SLACK_BOT_TOKEN) config.botToken = e.SLACK_BOT_TOKEN;
-    if (e.SLACK_USER_TOKEN) config.userToken = e.SLACK_USER_TOKEN;
     if (e.SLACK_MCP_TEAM_ID) config.teamId = e.SLACK_MCP_TEAM_ID;
     if (e.SLACK_API_URL) config.slackApiUrl = e.SLACK_API_URL;
 

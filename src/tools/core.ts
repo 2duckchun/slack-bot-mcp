@@ -4,7 +4,7 @@ import { getMethod, loadCatalog, searchMethods, suggestMethods } from '../slack/
 import { SlackToolError } from '../slack/errors.js';
 import { isReadMethod } from '../slack/policy.js';
 import { asRecord, buildResult } from '../slack/shape.js';
-import { preferredToken } from '../slack/token-routing.js';
+import { unsupportedReason } from '../slack/unsupported.js';
 import { defineTool, type ToolDefinition } from './registry.js';
 
 const listApiMethods = defineTool({
@@ -33,8 +33,10 @@ const listApiMethods = defineTool({
             method: method.method,
             description: method.description,
             writes: !isReadMethod(method.method),
-            token: preferredToken(method.method),
-            paginated: method.cursorPaginated || undefined
+            paginated: method.cursorPaginated || undefined,
+            // Present only on methods a bot token cannot reach, so the model
+            // does not spend a turn discovering the refusal by calling them.
+            unavailable: unsupportedReason(method.method)
         }));
 
         const summary = args.query || args.family ? `${methods.length} of ${catalog.methodCount} Slack API methods match.` : `Slack API has ${catalog.methodCount} methods across ${catalog.families.length} families; showing ${methods.length}.`;
@@ -63,19 +65,23 @@ const describeApiMethod = defineTool({
             description: method.description,
             docs: method.docUrl,
             writes: !isReadMethod(method.method),
-            token: preferredToken(method.method),
             cursor_paginated: method.cursorPaginated,
             arguments_optional: method.argsOptional,
             arguments: method.args
         };
         if (method.requiredOneOf) payload['requires_one_of'] = method.requiredOneOf;
         if (method.deprecated) payload['deprecated'] = true;
+
+        const unavailable = unsupportedReason(method.method);
+        if (unavailable) payload['unavailable'] = unavailable;
         if (method.argsUnknown) {
             payload['arguments_note'] = 'Slack documents this method but the local typings do not describe its arguments. Follow the docs link and pass params through slack_call_api.';
         }
 
         const required = method.args.filter((arg) => arg.required).map((arg) => arg.name);
-        const summary = method.argsUnknown
+        const summary = unavailable
+            ? `${method.method} ${unavailable}.`
+            : method.argsUnknown
             ? `${method.method} — argument details are not available locally; see ${method.docUrl}.`
             : `${method.method} — ${method.args.length} arguments${required.length > 0 ? `, required: ${required.join(', ')}` : ''}.`;
 
@@ -89,13 +95,12 @@ const callApi = defineTool({
     title: 'Call any Slack API method',
     description: [
         'Escape hatch: call any Slack Web API method by name with a raw parameter object.',
-        'Covers every method that has no dedicated tool here — canvases, lists, workflows, calls, admin, and anything Slack ships next.',
+        'Covers every method that has no dedicated tool here — canvases, lists, workflows, calls, and anything Slack ships next.',
         'Call slack_describe_api_method first to get the argument names right. Responses are returned as Slack sends them, so prefer a dedicated tool when one exists.'
     ].join(' '),
     inputSchema: z.object({
         method: z.string().describe('Exact method name, e.g. "reminders.add", "canvases.edit".'),
         params: z.record(z.string(), z.unknown()).default({}).describe('Arguments as a JSON object, exactly as Slack documents them.'),
-        use_token: z.enum(['bot', 'user']).optional().describe('Override which configured token to use. Defaults to whichever Slack requires for this method.'),
         auto_paginate: z.boolean().default(false).describe('Follow cursors and merge pages. Only valid for cursor-paginated methods.'),
         items_key: z.string().optional().describe('With auto_paginate, the response key holding the items, e.g. "channels", "members", "messages".'),
         max_items: z.number().int().min(1).max(5000).default(500).describe('With auto_paginate, the ceiling on collected items.')
@@ -116,10 +121,8 @@ const callApi = defineTool({
         const params = args.params as Record<string, unknown>;
         // A token belongs to the server's configuration, not to model-supplied arguments.
         if ('token' in params) {
-            throw new SlackToolError('Remove "token" from params. The server supplies credentials; use use_token to pick between the bot and user token.');
+            throw new SlackToolError('Remove "token" from params. The server authenticates with its configured bot token.');
         }
-
-        const callOptions = args.use_token ? { tokenKind: args.use_token } : {};
 
         if (args.auto_paginate) {
             if (known && !known.cursorPaginated) {
@@ -130,7 +133,6 @@ const callApi = defineTool({
             }
 
             const page = await gateway.paginate<unknown>(method, params, {
-                ...callOptions,
                 itemsKey: args.items_key,
                 maxItems: args.max_items
             });
@@ -144,7 +146,7 @@ const callApi = defineTool({
 
         let result: Awaited<ReturnType<typeof gateway.call>>;
         try {
-            result = await gateway.call(method, params, callOptions);
+            result = await gateway.call(method, params);
         } catch (error) {
             if (!known && error instanceof SlackToolError && error.slackError === 'unknown_method') {
                 throw new SlackToolError(`Slack does not recognise "${method}". Closest known methods: ${suggestMethods(method).join(', ')}.`);
@@ -165,31 +167,22 @@ const whoami = defineTool({
     name: 'slack_auth_test',
     toolset: 'core',
     title: 'Check Slack authentication',
-    description: 'Report which bot or user the configured tokens belong to, and which workspace. Use this first when a call fails with an auth or permission error.',
+    description: 'Report which bot the configured token belongs to, and which workspace. Use this first when a call fails with an auth or permission error.',
     inputSchema: z.object({}),
     annotations: { readOnly: true, idempotent: true },
     handler: async (_args, { gateway, config }) => {
-        const identities: Record<string, unknown> = {};
-
-        if (gateway.hasBotToken()) {
-            const bot = asRecord(await gateway.whoami('bot'));
-            identities['bot'] = { user_id: bot['user_id'], user: bot['user'], bot_id: bot['bot_id'], team: bot['team'], team_id: bot['team_id'], url: bot['url'] };
-        }
-        if (gateway.hasUserToken()) {
-            const user = asRecord(await gateway.whoami('user'));
-            identities['user'] = { user_id: user['user_id'], user: user['user'], team: user['team'], team_id: user['team_id'] };
-        }
+        const bot = asRecord(await gateway.whoami());
+        const catalog = loadCatalog();
 
         return buildResult(
-            `Authenticated. Tokens configured: ${Object.keys(identities).join(', ')}.`,
+            `Authenticated as ${bot['user'] ?? 'the bot'} in ${bot['team'] ?? 'the workspace'}.`,
             {
-                ...identities,
+                bot: { user_id: bot['user_id'], user: bot['user'], bot_id: bot['bot_id'], team: bot['team'], team_id: bot['team_id'], url: bot['url'] },
                 server: {
                     toolsets: [...config.toolsets],
                     read_only: config.readOnly,
-                    admin_enabled: config.enableAdmin,
                     allowed_channels: config.allowedChannels.size > 0 ? [...config.allowedChannels] : 'all',
-                    api_catalog: `${loadCatalog().methodCount} methods from ${loadCatalog().source.package}@${loadCatalog().source.version}`
+                    api_catalog: `${catalog.methodCount} methods from ${catalog.source.package}@${catalog.source.version}`
                 }
             },
             config.maxResponseChars

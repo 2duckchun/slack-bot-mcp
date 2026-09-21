@@ -197,17 +197,9 @@ describe('safety gates', () => {
         await expect(runTool('slack_call_api', { method: 'auth.test', params: { token: 'xoxb-someone-elses' } }, testConfig())).rejects.toThrow(/Remove "token"/);
     });
 
-    it('requires a user token for search', async () => {
-        await expect(runTool('slack_search_messages', { query: 'deploy' }, testConfig())).rejects.toThrow(/SLACK_USER_TOKEN/);
-    });
-
-    it('routes search to the user token when one is configured', async () => {
-        slack.on('search.messages', { ok: true, messages: { total: 0, matches: [] } });
-
-        const config = testConfig({ SLACK_USER_TOKEN: 'xoxp-test-token' });
-        await runTool('slack_search_messages', { query: 'deploy' }, config);
-
-        expect(slack.callsTo('search.messages')).toHaveLength(1);
+    it('refuses user-token-only methods before calling Slack', async () => {
+        await expect(runTool('slack_call_api', { method: 'search.messages', params: { query: 'deploy' } }, testConfig())).rejects.toThrow(/user-token/);
+        expect(slack.callsTo('search.messages')).toHaveLength(0);
     });
 });
 
@@ -234,8 +226,14 @@ describe('slack_describe_api_method', () => {
         const data = structured(await runTool('slack_describe_api_method', { method: 'chat.postMessage' }, testConfig()));
 
         expect(data['requires_one_of']).toEqual([['attachments'], ['blocks'], ['markdown_text'], ['text']]);
-        expect(data['token']).toBe('bot');
         expect(data['writes']).toBe(true);
+        expect(data['unavailable']).toBeUndefined();
+    });
+
+    it('flags a method the bot token cannot reach', async () => {
+        const data = structured(await runTool('slack_describe_api_method', { method: 'search.messages' }, testConfig()));
+
+        expect(data['unavailable']).toMatch(/user-token/);
     });
 
     it('is honest when it has no argument detail', async () => {

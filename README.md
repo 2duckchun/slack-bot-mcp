@@ -1,19 +1,25 @@
 # slack-bot-mcp
 
-Slack 봇의 Web API 전체를 AI 에이전트가 쓸 수 있게 열어 주는 MCP 서버입니다. 카탈로그에 등록된 메서드는 **298개**이고, 보통의 Slack 연동이 다루지 않는 AI 메시지 스트리밍, 캔버스, 리스트, 어시스턴트 스레드 API까지 포함합니다.
+Slack 봇의 Web API를 AI 에이전트가 쓸 수 있게 열어 주는 MCP 서버입니다. 봇이 할 수 있는 일 전부를 다루며, 보통의 Slack 연동이 손대지 않는 AI 메시지 스트리밍, 캔버스, 리스트, 어시스턴트 스레드 API까지 포함합니다.
+
+**봇 토큰(`xoxb-`) 하나만 받습니다.** 유저 토큰(`xoxp-`)은 받지 않고, 넣을 자리도 없습니다. 봇으로 할 수 있는 일과 사람 계정을 빌려야 하는 일의 경계를 설정이 아니라 구조로 못박아 둔 것입니다.
 
 Node.js 20 이상과 봇 토큰이 발급된 Slack 앱이 필요합니다.
 
 구조는 두 층입니다.
 
-- **전용 툴 64개**: 봇이 자주 쓰는 기능을 담당합니다. 인자에 타입이 있고, `#channel`·`@user`·이메일을 알아서 ID로 바꿔 주고, 응답을 필요한 만큼만 줄여서 돌려줍니다. 에러 메시지에는 다음에 뭘 해야 하는지 적혀 있습니다.
+- **전용 툴 62개**: 봇이 자주 쓰는 기능을 담당합니다. 인자에 타입이 있고, `#channel`·`@user`·이메일을 알아서 ID로 바꿔 주고, 응답을 필요한 만큼만 줄여서 돌려줍니다. 에러 메시지에는 다음에 뭘 해야 하는지 적혀 있습니다.
 - **디스커버리 툴 3개**: `slack_list_api_methods`, `slack_describe_api_method`, `slack_call_api`로 나머지 메서드에 전부 접근합니다. Slack에 새 메서드가 생겨도 그대로 쓸 수 있습니다.
+
+카탈로그에는 Slack Web API 메서드 298개가 들어 있고, 그중 **봇 토큰으로 도달 가능한 163개**를 실제로 호출합니다. 나머지 135개는 Slack이 유저 토큰이나 앱 레벨 토큰만 받는 것들이라(`admin.*` 96개, `search.*`, `reminders.*`, `oauth.*` 등) 호출 전에 이유를 붙여 거부합니다. 목록과 문서에서 사라지지는 않으니, 왜 못 쓰는지는 `slack_describe_api_method`로 확인할 수 있습니다.
 
 ## 공식 Slack MCP 서버와 뭐가 다른가요
 
 Slack도 `mcp.slack.com`에 공식 서버를 운영합니다(2026년 2월 GA). 개인이 자기 AI 클라이언트로 워크스페이스를 검색하고 읽는 용도라면 그쪽이 맞습니다. OAuth로 **사용자** 자격을 받고, 읽기와 검색 위주의 툴만 제공합니다.
 
-이 서버는 반대 경우를 위한 것입니다. 봇 토큰으로 **봇 자격으로** 동작하고, API 전 범위를 다룹니다. 메시지 작성과 수정, 파일 업로드, 스트리밍, 채널 관리, 캔버스와 리스트 조작까지 가능합니다.
+이 서버는 반대 경우를 위한 것입니다. 오직 봇 토큰으로 **봇 자격으로만** 동작하고, 봇이 할 수 있는 범위 전체를 다룹니다. 메시지 작성과 수정, 파일 업로드, 스트리밍, 채널 관리, 캔버스와 리스트 조작까지 가능합니다.
+
+바꿔 말하면 두 서버는 겹치지 않습니다. 사람 자격으로 워크스페이스를 뒤지는 일은 공식 서버에, 봇 자격으로 일을 처리하는 것은 이 서버에 맡기면 됩니다.
 
 ## 카탈로그를 최신으로 유지하는 방법
 
@@ -86,9 +92,7 @@ settings:
   socket_mode_enabled: false
 ```
 
-앱을 설치한 뒤 **Bot User OAuth Token**(`xoxb-`로 시작)을 복사합니다.
-
-`slack_search_messages`와 `slack_search_files`는 `search:read` 권한이 붙은 **사용자 토큰**(`xoxp-`)이 따로 필요합니다. Slack 검색 API는 봇 토큰을 아예 받지 않습니다.
+앱을 설치한 뒤 **Bot User OAuth Token**(`xoxb-`로 시작)을 복사합니다. 매니페스트에 `user:` 스코프 블록이 없으므로 유저 토큰은 애초에 발급되지 않습니다.
 
 ### 2. MCP 클라이언트에 등록하기
 
@@ -137,12 +141,10 @@ npx -y github:2duckchun/slack-mcp --help
 
 | 변수 | 기본값 | 설명 |
 | --- | --- | --- |
-| `SLACK_BOT_TOKEN` | — | 봇 토큰(`xoxb-`). 사용자 토큰이 없다면 필수입니다. |
-| `SLACK_USER_TOKEN` | — | 사용자 토큰(`xoxp-`). `search.*`, `reminders.*`, `admin.*`처럼 사용자 토큰만 받는 메서드에 필요합니다. |
+| `SLACK_BOT_TOKEN` | — | 봇 토큰(`xoxb-`). 필수이자, 이 서버가 받는 유일한 자격 증명입니다. |
 | `SLACK_MCP_TOOLSETS` | `core,messaging,conversations,users,reactions,files,workspace` | 쉼표로 구분한 툴셋 목록 또는 `all`. `core`는 항상 포함됩니다. |
 | `SLACK_MCP_READ_ONLY` | `false` | 쓰기 툴을 전부 감추고, `slack_call_api`로 들어오는 쓰기 메서드도 거부합니다. |
 | `SLACK_MCP_ALLOWED_CHANNELS` | — | 쓰기를 지정한 채널(ID 또는 `#이름`)로만 제한합니다. |
-| `SLACK_MCP_ENABLE_ADMIN` | `false` | `admin.*` 호출을 허용합니다. 조직 전체에 영향을 주는 작업이라 기본은 꺼져 있습니다. |
 | `SLACK_MCP_DENIED_METHODS` | `auth.revoke, apps.uninstall, tooling.tokens.rotate, oauth.*, openid.*, migration.exchange` | 거부할 메서드 패턴. 값을 지정하면 기본값을 대체합니다. |
 | `SLACK_MCP_ALLOWED_METHODS` | — | 값을 지정하면 여기에 걸리는 메서드만 호출할 수 있습니다. |
 | `SLACK_MCP_MAX_RESPONSE_CHARS` | `40000` | 툴 결과로 내보낼 JSON의 최대 길이. 넘으면 잘라 내고 안내 문구를 붙입니다. |
@@ -169,7 +171,6 @@ npx -y github:2duckchun/slack-mcp --help
 
 | 툴셋 | 툴 | 비고 |
 | --- | --- | --- |
-| `search` | `slack_search_messages`, `slack_search_files` | `SLACK_USER_TOKEN` 필요 |
 | `canvas` | `slack_create_canvas`, `slack_edit_canvas`, `slack_lookup_canvas_sections`, `slack_set_canvas_access`, `slack_delete_canvas` | Slack 유료 플랜 필요 |
 | `lists` | `slack_create_list`, `slack_list_list_items`, `slack_create_list_item`, `slack_update_list_item` | Slack 유료 플랜 필요 |
 | `assistant` | `slack_set_assistant_status`, `slack_set_assistant_title`, `slack_set_suggested_prompts` | 어시스턴트 기능을 켠 앱에서만 |
@@ -179,19 +180,27 @@ npx -y github:2duckchun/slack-mcp --help
 
 ## 나머지 API 쓰기
 
-전용 툴이 있는 메서드는 65개 정도고, 나머지도 호출 한 번이면 닿습니다.
+전용 툴이 있는 메서드는 60개 남짓이고, 봇 토큰으로 닿는 나머지도 호출 한 번이면 됩니다.
 
 ```
-slack_list_api_methods    { query: "reminder" }
-  → reminders.add, reminders.complete, reminders.delete, reminders.info, reminders.list
+slack_list_api_methods    { query: "canvas" }
+  → canvases.create, canvases.edit, canvases.delete, canvases.access.set, ...
 
-slack_describe_api_method { method: "reminders.add" }
-  → 인자, 타입, 필수 여부, 필요한 토큰 종류, 문서 링크
+slack_describe_api_method { method: "canvases.create" }
+  → 인자, 타입, 필수 여부, 문서 링크
 
-slack_call_api            { method: "reminders.add", params: { text: "ship it", time: "tomorrow at 9am" } }
+slack_call_api            { method: "canvases.create", params: { title: "회고" } }
 ```
 
-`slack_call_api`도 다른 툴과 똑같은 제약을 받습니다. 읽기 전용 모드, 채널 허용 목록, 어드민 스위치, 거부 목록이 전부 그대로 적용됩니다. `params`에 `token`을 넣으면 거부합니다. 자격 증명은 모델이 만든 값이 아니라 서버 설정에서만 가져옵니다.
+봇 토큰으로 닿지 않는 메서드는 목록에 `unavailable` 사유가 함께 붙고, 호출하면 Slack까지 가기 전에 거부됩니다.
+
+```
+slack_describe_api_method { method: "search.messages" }
+  → unavailable: "is a user-token (xoxp-...) method; this server
+     authenticates as a bot and cannot call it"
+```
+
+`slack_call_api`도 다른 툴과 똑같은 제약을 받습니다. 읽기 전용 모드, 채널 허용 목록, 거부 목록이 전부 그대로 적용됩니다. `params`에 `token`을 넣으면 거부합니다. 자격 증명은 모델이 만든 값이 아니라 서버 설정에서만 가져옵니다.
 
 ## 설계 메모
 
@@ -202,6 +211,8 @@ slack_call_api            { method: "reminders.add", params: { text: "ship it", 
 **에러는 해결 방법까지 알려줍니다.** `missing_scope`면 필요한 스코프와 현재 스코프를 같이 보여주면서 재설치를 안내합니다. `not_in_channel`이면 `slack_join_channel`을, `invalid_blocks`면 `slack_validate_blocks`를 가리킵니다. 레이트 리밋에 걸리면 얼마나 기다려야 하는지 함께 표시합니다.
 
 **읽기/쓰기 판정은 보수적으로 합니다.** 분류에 없는 메서드는 쓰기로 간주합니다. 아직 등록되지 않은 메서드 때문에 읽기 전용 모드가 뚫리는 일은 없습니다.
+
+**봇 전용은 설정이 아니라 구조입니다.** 유저 토큰을 읽는 코드가 아예 없으므로, 환경 변수를 잘못 넣어서 사람 권한으로 동작하는 사고가 일어날 수 없습니다. 유저 토큰이 필요한 메서드 목록은 `src/slack/unsupported.ts`에 있고, 호출 직전에 이 목록을 확인해 거부합니다.
 
 ## 개발
 
@@ -232,4 +243,6 @@ slack-bot-mcp --version
 - **stdio만 지원합니다.** `src/server.ts`의 `createServer()`는 트랜스포트와 분리돼 있어서, `src/index.ts` 옆에 Streamable HTTP 엔트리포인트를 추가하는 게 자연스러운 다음 단계입니다.
 - **이벤트는 처리하지 않습니다.** MCP는 요청/응답 방식이라, Slack 이벤트를 받으려면 별도 프로세스에서 Socket Mode를 돌려야 합니다.
 - **워크스페이스 하나만 지원합니다.** 토큰을 환경 변수에서 읽습니다. 여러 워크스페이스를 OAuth로 붙이려면 토큰 저장소가 필요하고, 손볼 지점은 `src/slack/client.ts`입니다.
-- **이 서버가 가질 수 없는 자격 증명을 요구하는 메서드가 있습니다.** 앱 레벨 토큰(`apps.connections.open`), 앱 설정 토큰(`apps.manifest.*`), 클라이언트 시크릿(`oauth.*`) 같은 것들입니다. 이런 메서드는 Slack의 알아보기 어려운 에러를 그대로 보여주는 대신, 호출 전에 이유를 붙여 거부합니다.
+- **검색이 없습니다.** Slack의 `search.*`는 봇 토큰을 받지 않습니다. 워크스페이스 전체 검색 대신, `slack_get_channel_history`에 `oldest`/`latest`를 주고 봇이 들어가 있는 채널을 훑는 방식으로 대체해야 합니다.
+- **`admin.*`을 쓸 수 없습니다.** 조직 관리 API는 전부 관리자 유저 토큰을 요구합니다. 봇 토큰으로는 도달할 방법이 없습니다.
+- **그 밖에 이 서버가 가질 수 없는 자격 증명을 요구하는 메서드들.** 앱 레벨 토큰(`apps.connections.open`), 앱 설정 토큰(`apps.manifest.*`), 클라이언트 시크릿(`oauth.*`) 같은 것들입니다. 이런 메서드는 Slack의 알아보기 어려운 에러를 그대로 보여주는 대신, 호출 전에 이유를 붙여 거부합니다.

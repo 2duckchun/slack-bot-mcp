@@ -31,10 +31,6 @@ export function isReadMethod(method: string): boolean {
  * which knob to turn.
  */
 export function assertMethodAllowed(method: string, config: Config): void {
-    if (method.startsWith('admin.') && !config.enableAdmin) {
-        throw new SlackToolError(`${method} is an admin method and is disabled. Set SLACK_MCP_ENABLE_ADMIN=true to allow admin.* calls.`);
-    }
-
     if (config.deniedMethods.some((pattern) => pattern.test(method))) {
         throw new SlackToolError(`${method} is blocked by SLACK_MCP_DENIED_METHODS.`);
     }

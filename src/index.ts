@@ -23,19 +23,17 @@ Options
   -v, --version   Show the version.
 
 Required environment
-  SLACK_BOT_TOKEN        Bot token (xoxb-...) from your Slack app.
+  SLACK_BOT_TOKEN        Bot token (xoxb-...) from your Slack app. The only
+                         credential this server accepts — methods Slack allows
+                         a user token for are refused with an explanation.
                          Create one at https://api.slack.com/apps — the README
                          has an app manifest with the scopes each toolset needs.
 
 Optional environment
-  SLACK_USER_TOKEN               User token (xoxp-...). Required for search.*,
-                                 reminders.*, admin.*, and other methods Slack
-                                 refuses a bot token for.
   SLACK_MCP_TOOLSETS             Default: ${DEFAULT_TOOLSETS.join(',')}
                                  Any of: ${TOOLSETS.join(', ')}, or "all".
   SLACK_MCP_READ_ONLY            Withhold every write tool. Default false.
   SLACK_MCP_ALLOWED_CHANNELS     Confine writes to these channels (IDs or #names).
-  SLACK_MCP_ENABLE_ADMIN         Allow admin.* methods. Default false.
   SLACK_MCP_DENIED_METHODS       Method patterns to refuse, e.g. "chat.delete,files.*".
   SLACK_MCP_ALLOWED_METHODS      If set, only matching methods may be called.
   SLACK_MCP_MAX_RESPONSE_CHARS   Cap on JSON rendered per result. Default 40000.

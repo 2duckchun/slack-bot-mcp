@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { loadConfig } from '../src/config.js';
 import { assertChannelAllowed, assertMethodAllowed, isReadMethod } from '../src/slack/policy.js';
-import { preferredToken, unsupportedTokenReason } from '../src/slack/token-routing.js';
+import { unsupportedReason } from '../src/slack/unsupported.js';
 import { testConfig } from './helpers.js';
 
 describe('isReadMethod', () => {
@@ -31,11 +31,6 @@ describe('isReadMethod', () => {
 });
 
 describe('assertMethodAllowed', () => {
-    it('blocks admin methods by default and allows them when enabled', () => {
-        expect(() => assertMethodAllowed('admin.users.list', testConfig())).toThrow(/SLACK_MCP_ENABLE_ADMIN/);
-        expect(() => assertMethodAllowed('admin.users.list', testConfig({ SLACK_MCP_ENABLE_ADMIN: 'true' }))).not.toThrow();
-    });
-
     it('blocks the built-in dangerous defaults', () => {
         expect(() => assertMethodAllowed('auth.revoke', testConfig())).toThrow(/SLACK_MCP_DENIED_METHODS/);
         expect(() => assertMethodAllowed('apps.uninstall', testConfig())).toThrow(/SLACK_MCP_DENIED_METHODS/);
@@ -86,32 +81,37 @@ describe('assertChannelAllowed', () => {
     });
 });
 
-describe('token routing', () => {
-    it('sends search and admin to the user token', () => {
-        expect(preferredToken('search.messages')).toBe('user');
-        expect(preferredToken('admin.users.list')).toBe('user');
-        expect(preferredToken('reminders.add')).toBe('user');
+describe('unsupported methods', () => {
+    it('refuses whole user-token-only families', () => {
+        expect(unsupportedReason('search.messages')).toMatch(/user-token/);
+        expect(unsupportedReason('admin.users.list')).toMatch(/user-token/);
+        expect(unsupportedReason('reminders.add')).toMatch(/user-token/);
     });
 
-    it('leaves everything else on the bot token', () => {
-        expect(preferredToken('chat.postMessage')).toBe('bot');
-        expect(preferredToken('conversations.list')).toBe('bot');
+    it('refuses the user-token-only methods inside otherwise reachable families', () => {
+        expect(unsupportedReason('users.setPhoto')).toMatch(/user-token/);
+        expect(unsupportedReason('chat.meMessage')).toMatch(/user-token/);
     });
 
     it('names the credential it cannot supply', () => {
-        expect(unsupportedTokenReason('apps.connections.open')).toMatch(/app-level token/);
-        expect(unsupportedTokenReason('oauth.v2.access')).toMatch(/client credentials/);
-        expect(unsupportedTokenReason('chat.postMessage')).toBeUndefined();
+        expect(unsupportedReason('apps.connections.open')).toMatch(/app-level token/);
+        expect(unsupportedReason('oauth.v2.access')).toMatch(/client credentials/);
+    });
+
+    it('leaves everything a bot token can reach alone', () => {
+        expect(unsupportedReason('chat.postMessage')).toBeUndefined();
+        expect(unsupportedReason('conversations.list')).toBeUndefined();
+        expect(unsupportedReason('users.info')).toBeUndefined();
     });
 });
 
 describe('config', () => {
-    it('requires a token', () => {
+    it('requires a bot token', () => {
         expect(() => loadConfig({} as NodeJS.ProcessEnv)).toThrow(/SLACK_BOT_TOKEN/);
     });
 
-    it('accepts a user token alone', () => {
-        expect(() => loadConfig({ SLACK_USER_TOKEN: 'xoxp-x' } as NodeJS.ProcessEnv)).not.toThrow();
+    it('rejects a user token standing in for one', () => {
+        expect(() => loadConfig({ SLACK_USER_TOKEN: 'xoxp-x' } as NodeJS.ProcessEnv)).toThrow(/SLACK_BOT_TOKEN/);
     });
 
     it('defaults to the core toolsets and always keeps core', () => {

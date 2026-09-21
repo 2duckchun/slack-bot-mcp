@@ -31,7 +31,7 @@ const HINTS: Record<string, string> = {
     invalid_auth: 'The token was rejected. Check SLACK_BOT_TOKEN and that the app is still installed.',
     token_revoked: 'The token has been revoked. Reinstall the Slack app and issue a new token.',
     account_inactive: 'The token belongs to a deactivated user or uninstalled app.',
-    not_allowed_token_type: 'Slack refused this token type for this method. Most such methods need a user token — set SLACK_USER_TOKEN (xoxp-...).',
+    not_allowed_token_type: 'Slack refused a bot token for this method. It needs a user token (xoxp-...), which this bot-only server does not hold.',
     no_permission: 'The token lacks permission for this method. Usually a missing scope or an admin-only method.',
     restricted_action: 'Workspace settings forbid this action for apps.',
     invalid_blocks: 'Block Kit payload rejected. Run slack_validate_blocks on the blocks array to see which block is wrong.',

@@ -29,7 +29,7 @@ describe('MCP surface', () => {
         expect(names).toContain('slack_upload_file');
         // Opt-in toolsets stay out of the default listing.
         expect(names).not.toContain('slack_create_canvas');
-        expect(names).not.toContain('slack_search_messages');
+        expect(names).not.toContain('slack_create_list');
 
         await close();
     });
@@ -39,7 +39,7 @@ describe('MCP surface', () => {
         const { tools } = await client.listTools();
 
         expect(tools.length).toBeGreaterThanOrEqual(45);
-        expect(tools.map((tool) => tool.name)).toEqual(expect.arrayContaining(['slack_create_canvas', 'slack_search_messages', 'slack_create_list', 'slack_set_assistant_status', 'slack_publish_home_view']));
+        expect(tools.map((tool) => tool.name)).toEqual(expect.arrayContaining(['slack_create_canvas', 'slack_create_list', 'slack_set_assistant_status', 'slack_publish_home_view']));
 
         await close();
     });

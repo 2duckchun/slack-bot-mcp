@@ -12,7 +12,6 @@ import { listTools } from './tools/lists.js';
 import { messagingTools } from './tools/messaging.js';
 import { reactionTools } from './tools/reactions.js';
 import { registerTools, type RegistrationSummary, type ToolDefinition } from './tools/registry.js';
-import { searchTools } from './tools/search.js';
 import { userTools } from './tools/users.js';
 import { viewTools } from './tools/views.js';
 import { workspaceTools } from './tools/workspace.js';
@@ -26,7 +25,6 @@ export const ALL_TOOLS: ToolDefinition[] = [
     ...reactionTools,
     ...fileTools,
     ...workspaceTools,
-    ...searchTools,
     ...canvasTools,
     ...listTools,
     ...assistantTools,

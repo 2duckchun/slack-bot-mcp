@@ -5,7 +5,7 @@ import { SlackToolError, toSlackToolError } from './errors.js';
 import { asRecord } from './shape.js';
 import { assertChannelAllowed, assertMethodAllowed, isReadMethod } from './policy.js';
 import { Resolver } from './resolve.js';
-import { preferredToken, type TokenKind, unsupportedTokenReason } from './token-routing.js';
+import { unsupportedReason } from './unsupported.js';
 
 /** Argument keys that name the channel a write would land in. */
 const CHANNEL_ARG_KEYS = ['channel', 'channel_id'] as const;
@@ -19,8 +19,6 @@ const CHANNEL_ARG_KEYS = ['channel', 'channel_id'] as const;
 const RETRY_CONFIG: RetryOptions = { retries: 5, factor: 3.86 };
 
 export interface CallOptions {
-    /** Overrides the token this method would normally use. */
-    tokenKind?: TokenKind;
     /**
      * Skips the channel allowlist check. Only for calls whose `channel`
      * argument has already been checked by the caller.
@@ -43,48 +41,32 @@ export interface PaginateResult<T> {
 }
 
 /**
- * The single door every Slack call goes through: token selection, the
- * configured safety gates, pagination, and error translation all live here so
- * no individual tool can accidentally skip them.
+ * The single door every Slack call goes through: the configured safety gates,
+ * pagination, and error translation all live here so no individual tool can
+ * accidentally skip them.
  */
 export class SlackGateway {
     readonly resolver: Resolver;
 
-    readonly #bot?: WebClient;
-    readonly #user?: WebClient;
-    #authCache = new Map<TokenKind, WebAPICallResult>();
+    readonly #bot: WebClient;
+    #authCache?: WebAPICallResult;
 
     constructor(readonly config: Config) {
-        const options = {
+        this.#bot = new WebClient(config.botToken, {
             logLevel: LogLevel.ERROR,
             retryConfig: RETRY_CONFIG,
             ...(config.slackApiUrl ? { slackApiUrl: config.slackApiUrl } : {}),
             ...(config.teamId ? { teamId: config.teamId } : {})
-        };
+        });
 
-        if (config.botToken) this.#bot = new WebClient(config.botToken, options);
-        if (config.userToken) this.#user = new WebClient(config.userToken, options);
-
-        const forResolution = this.#bot ?? this.#user;
-        if (!forResolution) throw new Error('SlackGateway requires at least one token.');
-        this.resolver = new Resolver(forResolution, config.teamId);
+        this.resolver = new Resolver(this.#bot, config.teamId);
     }
 
-    /** The client for a method, honouring Slack's token-type requirements. */
-    clientFor(method: string, override?: TokenKind): { client: WebClient; kind: TokenKind } {
-        const unsupported = unsupportedTokenReason(method);
+    /** The bot client, once the method is known to be reachable with a bot token. */
+    clientFor(method: string): WebClient {
+        const unsupported = unsupportedReason(method);
         if (unsupported) throw new SlackToolError(`${method} ${unsupported}.`);
-
-        const wanted = override ?? preferredToken(method);
-
-        if (wanted === 'user') {
-            if (this.#user) return { client: this.#user, kind: 'user' };
-            throw new SlackToolError(`${method} requires a user token. Set SLACK_USER_TOKEN (xoxp-...) with the scopes this method needs.`);
-        }
-
-        if (this.#bot) return { client: this.#bot, kind: 'bot' };
-        if (this.#user) return { client: this.#user, kind: 'user' };
-        throw new SlackToolError('No Slack token is configured.');
+        return this.#bot;
     }
 
     /** Calls any Web API method after applying every configured gate. */
@@ -92,7 +74,7 @@ export class SlackGateway {
         assertMethodAllowed(method, this.config);
         if (!options.channelAlreadyChecked) await this.#checkChannelArgs(method, args);
 
-        const { client } = this.clientFor(method, options.tokenKind);
+        const client = this.clientFor(method);
         try {
             return await client.apiCall(method, args);
         } catch (error) {
@@ -109,7 +91,7 @@ export class SlackGateway {
         assertMethodAllowed(method, this.config);
         if (!options.channelAlreadyChecked) await this.#checkChannelArgs(method, args);
 
-        const { client } = this.clientFor(method, options.tokenKind);
+        const client = this.clientFor(method);
         const items: T[] = [];
         let pages = 0;
         let nextCursor: string | undefined;
@@ -143,27 +125,16 @@ export class SlackGateway {
         return id;
     }
 
-    /** `auth.test` for a token kind, cached for the process lifetime. */
-    async whoami(kind: TokenKind = 'bot'): Promise<WebAPICallResult> {
-        const cached = this.#authCache.get(kind);
-        if (cached) return cached;
+    /** `auth.test` for the bot token, cached for the process lifetime. */
+    async whoami(): Promise<WebAPICallResult> {
+        if (this.#authCache) return this.#authCache;
 
-        const { client } = this.clientFor('auth.test', kind);
         try {
-            const result = await client.auth.test();
-            this.#authCache.set(kind, result);
-            return result;
+            this.#authCache = await this.#bot.auth.test();
+            return this.#authCache;
         } catch (error) {
             throw toSlackToolError(error, 'auth.test');
         }
-    }
-
-    hasUserToken(): boolean {
-        return this.#user !== undefined;
-    }
-
-    hasBotToken(): boolean {
-        return this.#bot !== undefined;
     }
 
     /** Applies the channel allowlist to whichever channel argument a write carries. */
@@ -199,8 +170,7 @@ export class SlackGateway {
         if (cached !== id) return cached;
 
         try {
-            const { client } = this.clientFor('conversations.info');
-            const result = await client.conversations.info({ channel: id });
+            const result = await this.#bot.conversations.info({ channel: id });
             const name = (result.channel as { name?: string } | undefined)?.name;
             if (name) {
                 this.resolver.rememberChannels([{ id, name }]);

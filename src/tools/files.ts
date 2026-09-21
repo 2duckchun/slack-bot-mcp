@@ -62,7 +62,7 @@ const uploadFile = defineTool({
         }
 
         // `filesUploadV2` is an SDK helper, not an API method; gate on the call it ends with.
-        const { client } = gateway.clientFor('files.completeUploadExternal');
+        const client = gateway.clientFor('files.completeUploadExternal');
         const result = asRecord(await client.filesUploadV2(upload as never));
         const files = ((result['files'] ?? []) as Array<Record<string, unknown>>).flatMap((entry) => (asRecord(entry)['files'] ?? [entry]) as Array<Record<string, unknown>>);
 
